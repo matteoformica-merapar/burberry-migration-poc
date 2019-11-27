@@ -1,0 +1,6 @@
+
+*.class
+ATGcompare/target/*
+LambdaResetTables/node_modules/*
+LambdaDynamoDbLoader/node_modules/*
+ATGcompare/.settings/*
