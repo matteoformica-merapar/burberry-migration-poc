@@ -1,0 +1,59 @@
+{
+  "Comment": "Migration data cross checker",
+  "StartAt": "Load Data",
+  "States": {
+    "Load Data": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:495733763644:function:CIAM_LoadMigratedDataToDynamoDB",
+      "InputPath": "$.loadStage",
+      "ResultPath": "$.loadStage.lambdaresult",
+      "Next": "Check Load Result"
+    },
+    "Check Load Result": {
+      "Type" : "Choice",
+      "Choices": [
+        {
+          "Variable": "$.loadStage.lambdaresult.totalErrors",
+          "NumericEquals": 0, 
+          "Next": "Compare Datasets"
+        },
+        {
+          "Variable": "$.loadStage.lambdaresult.totalErrors",
+          "NumericGreaterThan": 0,
+          "Next": "FailState"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "Compare Datasets": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:eu-west-1:495733763644:function:CIAM_compareATGndCDCdata_Java",
+      "InputPath": "$.compareStage",
+      "ResultPath": "$.compareStage.lambdaresult",
+      "Next": "Check Compare Result"
+    },
+    "Check Compare Result": {
+      "Type" : "Choice",
+      "Choices": [
+        {
+          "Variable": "$.compareStage.lambdaresult.atgRecordFoundNotMatching",
+          "NumericEquals": 0, 
+          "Next": "Success"
+        },
+        {
+          "Variable": "$.compareStage.lambdaresult.atgRecordFoundNotMatching",
+          "NumericGreaterThan": 0,
+          "Next": "FailState"
+        }
+      ],
+      "Default": "FailState"
+    },
+    "Success": {
+      "Type": "Succeed"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Cause": "No Matches!"
+    }
+  }
+}
