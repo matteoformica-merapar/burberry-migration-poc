@@ -68,19 +68,20 @@ exports.handler = (event, context, callback) => {
 
     if (srcKey.startsWith("ATG_Export")) {
       tableName = "customers";
-    }
-
-    if (srcKey.startsWith("CDC_Import")) {
+    } else if (srcKey.startsWith("CDC_Import")) {
       tableName = "cdcimport";
+    } else {
+      console.log("File name not recognized: " + srcItem.Key);
     }
-
-    return new Promise((resolve, reject) => {
+    
+    if(tableName === 'customers' || tableName === 'cdcimport'){
+       return new Promise((resolve, reject) => {
       async.waterfall([
         function(next) {
-          console.log("DOWNLOAD: " + srcKey);
+          console.log("DOWNLOAD: " + srcItem.Key);
           S3.getObject({
             Bucket: srcBucket,
-            Key: srcKey
+            Key: srcItem.Key
           }, next);
         },
         function(data, next) {
@@ -200,6 +201,7 @@ exports.handler = (event, context, callback) => {
         resolve();
       });
     });
+    }
   }
 
   function checkData(data) {
