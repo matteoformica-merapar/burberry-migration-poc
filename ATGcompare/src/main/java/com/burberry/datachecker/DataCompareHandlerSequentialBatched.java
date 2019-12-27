@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Formatter;
 import java.util.HashMap;
@@ -65,7 +67,17 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 			System.out.format("Bucket name is not available: %s", bucketName);
 			System.exit(1);
 		}
-
+		
+//		List<String> ids = new ArrayList<String>();
+//		ids.add("317120516405");
+//		ids.add("312606296316");
+//		TableKeysAndAttributes targetTableKeysAndAttributes = new TableKeysAndAttributes(System.getenv("TARGET_TABLE"));
+//		targetTableKeysAndAttributes.addHashOnlyPrimaryKeys("customerId", ids.toArray())
+//				.withProjectionExpression("customerId, attributesHash, fileName");
+//		BatchGetItemOutcome outcome = dynamoDB.batchGetItem(targetTableKeysAndAttributes);
+//		List<Item> items = outcome.getTableItems().get(System.getenv("TARGET_TABLE"));
+//		System.out.format("RESULT: %s \n", items.size());
+		
 		scanATGtable();
 
 		fmt.format("Record found: %s \n", recordFound);
@@ -93,55 +105,56 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 				.withTableName(System.getenv("SOURCE_TABLE"))
 				.withExclusiveStartKey(lastKey)
 				.withProjectionExpression("customerId, attributesHash, fileName");
-
-		List<CustomerRecord> scannedCustomers = new ArrayList<>();
-
+		
+		int processedItems = 0;
 		do {
+			List<CustomerRecord> scannedCustomers = new ArrayList<>();
 			ScanResult result = client.scan(scanRequest);
+			int scanIterationCounter = 0;
+			List<CustomerRecord> leftovers = new ArrayList<>();
 			for (Map<String, AttributeValue> item : result.getItems()) {
-
-				if (item.get("customerId") != null && item.get("attributesHash") != null && item.get("fileName") != null) {
-					
-					if(scannedCustomers.size() == BATCH_SIZE -1) {
-						queryTargetBatch(scannedCustomers);
-						scannedCustomers = new ArrayList<CustomerRecord>();						
-					} else {
-						scannedCustomers.add(new CustomerRecord(
-								item.get("customerId").getS(),
-								item.get("attributesHash").getS(), 
-								item.get("fileName").getS()));
-					} 
-				} else {
-					if (item.get("attributesHash") == null) {
-						System.err.format("Hash not present for record: %s", item.get("customerId"));
-					}
-					if (item.get("fileName") == null) {
-						System.err.format("Filename not present for record: %s", item.get("customerId"));
-					}
-				}
+				
+				if((scanIterationCounter+1) % (BATCH_SIZE+1) != 0) {
+					scannedCustomers.add(new CustomerRecord(
+						item.get("customerId").getS(),
+						item.get("attributesHash").getS(), 
+						item.get("fileName").getS()));
+				}else {
+					queryTargetBatch(scannedCustomers);
+					scannedCustomers = new ArrayList<CustomerRecord>();
+					leftovers.add(new CustomerRecord(
+						item.get("customerId").getS(),
+						item.get("attributesHash").getS(), 
+						item.get("fileName").getS()));
+				} 
+				scanIterationCounter++;
 			}
-
-			lastKey = result.getLastEvaluatedKey();
+			
+			queryTargetBatch(scannedCustomers);			
+			queryTargetBatch(leftovers);
+			lastKey = result.getLastEvaluatedKey();			
 			scanRequest.setExclusiveStartKey(lastKey);
 		} while (lastKey != null);
-
+		
+		
+		System.out.format("PROCESSED RECORDS : %s \n", processedItems);
 	}
-
+	
 	private static void queryTargetBatch(List<CustomerRecord> scannedCustomers) {
 
 		List<String> ids = scannedCustomers.stream().map(x -> x.getCustomerId()).collect(Collectors.toList());
-
+		
 		TableKeysAndAttributes targetTableKeysAndAttributes = new TableKeysAndAttributes(System.getenv("TARGET_TABLE"));
-		targetTableKeysAndAttributes.addHashOnlyPrimaryKeys("customerId", ids)
+		targetTableKeysAndAttributes.addHashOnlyPrimaryKeys("customerId", ids.toArray())
 				.withProjectionExpression("customerId, attributesHash, fileName");
 
 		BatchGetItemOutcome outcome = dynamoDB.batchGetItem(targetTableKeysAndAttributes);
 		List<Item> items = outcome.getTableItems().get(System.getenv("TARGET_TABLE"));
-
+				
 		Map<String, CustomerRecord> queryResultMap = new HashMap<String, CustomerRecord>();
 		for (Item i : items) {
 			queryResultMap.put(i.getString("customerId"),
-					new CustomerRecord(i.getString("customerId"), i.getString("hash"), i.getString("fileName")));
+					new CustomerRecord(i.getString("customerId"), i.getString("attributesHash"), i.getString("fileName")));
 		}
 
 		for (CustomerRecord mainRecord : scannedCustomers) {
@@ -151,7 +164,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 				if (System.getenv("WRITE_REPORT").equals("true")) {
 					if (!targetItem.getHash().equals(mainRecord.getHash())) {
 						recordFoundNotMatching++;
-						ErrorDetail err = new ErrorDetail("No item found with the given customerId in CDC dataset.",
+						ErrorDetail err = new ErrorDetail("The attributes for the customer in the 2 tables are different!",
 								targetItem.getCustomerId(), mainRecord.getFilename(), targetItem.getFilename());
 						errorDetails.add(err);
 					} else {
@@ -161,7 +174,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 				recordFound++;
 			} else {
 				if (System.getenv("WRITE_REPORT").equals("true")) {
-					ErrorDetail err = new ErrorDetail("Records not matching for given customer",
+					ErrorDetail err = new ErrorDetail("The customer has not been found in CDC table",
 							mainRecord.getCustomerId(), mainRecord.getFilename(), null);
 					errorDetails.add(err);
 				}
