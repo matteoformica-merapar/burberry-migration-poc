@@ -32,11 +32,12 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.burberry.datachecker.model.CompareRequest;
 import com.burberry.datachecker.model.CustomerRecord;
 import com.burberry.datachecker.model.ErrorDetail;
 import com.burberry.datachecker.model.ResponseClass;
 
-public class DataCompareHandlerSequentialBatched implements RequestHandler<Object, ResponseClass> {
+public class DataCompareHandlerSequentialBatched implements RequestHandler<CompareRequest, ResponseClass> {
 
 	static AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
 	AmazonS3 s3client = AmazonS3ClientBuilder.standard().build();
@@ -46,7 +47,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 	static int recordFound = 0;
 	static int recordFoundNotMatching = 0;
 	static int recordFoundMatching = 0;
-	String bucketName = System.getenv("BUCKET_NAME");
+	String bucketName;
 	static List<ErrorDetail> errorDetails;
 
 	static final int BATCH_SIZE = 100;
@@ -55,30 +56,24 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 	Formatter fmt = new Formatter(sb);
 
 	@Override
-	public ResponseClass handleRequest(Object input, Context context) {
-
+	public ResponseClass handleRequest(CompareRequest input, Context context) {
+		
+		System.out.format("Input received: %s \n", input);
+		
+		bucketName = input.getBucket();
+		
 		recordNotFound = 0;
 		recordFound = 0;
 		recordFoundMatching = 0;
 		recordFoundNotMatching = 0;
 		errorDetails = new ArrayList<ErrorDetail>();
-
+		
 		if (!s3client.doesBucketExistV2(bucketName)) {
 			System.out.format("Bucket name is not available: %s", bucketName);
 			System.exit(1);
 		}
 		
-//		List<String> ids = new ArrayList<String>();
-//		ids.add("317120516405");
-//		ids.add("312606296316");
-//		TableKeysAndAttributes targetTableKeysAndAttributes = new TableKeysAndAttributes(System.getenv("TARGET_TABLE"));
-//		targetTableKeysAndAttributes.addHashOnlyPrimaryKeys("customerId", ids.toArray())
-//				.withProjectionExpression("customerId, attributesHash, fileName");
-//		BatchGetItemOutcome outcome = dynamoDB.batchGetItem(targetTableKeysAndAttributes);
-//		List<Item> items = outcome.getTableItems().get(System.getenv("TARGET_TABLE"));
-//		System.out.format("RESULT: %s \n", items.size());
-		
-		scanATGtable();
+		scanATGtable(input);
 
 		fmt.format("Record found: %s \n", recordFound);
 		fmt.format("Record not found: %s \n", recordNotFound);
@@ -91,18 +86,18 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 		ResponseClass rsp = new ResponseClass(recordFound, recordFoundMatching, recordNotFound, recordFoundNotMatching,
 				errorDetails);
 		JSONObject s3Report = new JSONObject(rsp);
-		dumpReportToS3(s3Report.toString(2));
+		dumpReportToS3(input, s3Report.toString(2));
 		// remove list of error messages from Lambda output
 		rsp.setMessages(null);
 		return rsp;
 	}
 
-	private void scanATGtable() {
+	private void scanATGtable(CompareRequest input) {
 
 		Map<String, AttributeValue> lastKey = null;
 
 		ScanRequest scanRequest = new ScanRequest()
-				.withTableName(System.getenv("SOURCE_TABLE"))
+				.withTableName(input.getSourceTable())
 				.withExclusiveStartKey(lastKey)
 				.withProjectionExpression("customerId, attributesHash, fileName");
 		
@@ -120,7 +115,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 						item.get("attributesHash").getS(), 
 						item.get("fileName").getS()));
 				}else {
-					queryTargetBatch(scannedCustomers);
+					queryTargetBatch(input, scannedCustomers);
 					scannedCustomers = new ArrayList<CustomerRecord>();
 					leftovers.add(new CustomerRecord(
 						item.get("customerId").getS(),
@@ -130,8 +125,8 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 				scanIterationCounter++;
 			}
 			
-			queryTargetBatch(scannedCustomers);			
-			queryTargetBatch(leftovers);
+			queryTargetBatch(input, scannedCustomers);			
+			queryTargetBatch(input, leftovers);
 			lastKey = result.getLastEvaluatedKey();			
 			scanRequest.setExclusiveStartKey(lastKey);
 		} while (lastKey != null);
@@ -140,16 +135,16 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 		System.out.format("PROCESSED RECORDS : %s \n", processedItems);
 	}
 	
-	private static void queryTargetBatch(List<CustomerRecord> scannedCustomers) {
+	private static void queryTargetBatch(CompareRequest input, List<CustomerRecord> scannedCustomers) {
 
 		List<String> ids = scannedCustomers.stream().map(x -> x.getCustomerId()).collect(Collectors.toList());
 		
-		TableKeysAndAttributes targetTableKeysAndAttributes = new TableKeysAndAttributes(System.getenv("TARGET_TABLE"));
+		TableKeysAndAttributes targetTableKeysAndAttributes = new TableKeysAndAttributes(input.getTargetTable());
 		targetTableKeysAndAttributes.addHashOnlyPrimaryKeys("customerId", ids.toArray())
 				.withProjectionExpression("customerId, attributesHash, fileName");
 
 		BatchGetItemOutcome outcome = dynamoDB.batchGetItem(targetTableKeysAndAttributes);
-		List<Item> items = outcome.getTableItems().get(System.getenv("TARGET_TABLE"));
+		List<Item> items = outcome.getTableItems().get(input.getTargetTable());
 				
 		Map<String, CustomerRecord> queryResultMap = new HashMap<String, CustomerRecord>();
 		for (Item i : items) {
@@ -161,7 +156,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 			CustomerRecord targetItem = queryResultMap.get(mainRecord.getCustomerId());
 
 			if (targetItem != null) {
-				if (System.getenv("WRITE_REPORT").equals("true")) {
+				if (input.getWriteReport()) {
 					if (!targetItem.getHash().equals(mainRecord.getHash())) {
 						recordFoundNotMatching++;
 						ErrorDetail err = new ErrorDetail("The attributes for the customer in the 2 tables are different!",
@@ -173,7 +168,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 				}
 				recordFound++;
 			} else {
-				if (System.getenv("WRITE_REPORT").equals("true")) {
+				if (input.getWriteReport()) {
 					ErrorDetail err = new ErrorDetail("The customer has not been found in CDC table",
 							mainRecord.getCustomerId(), mainRecord.getFilename(), null);
 					errorDetails.add(err);
@@ -183,8 +178,8 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Objec
 		}
 	}
 
-	private void dumpReportToS3(String report) {
-		if (System.getenv("WRITE_REPORT").equals("true")) {
+	private void dumpReportToS3(CompareRequest input, String report) {
+		if (input.getWriteReport()) {
 			InputStream targetStream = new ByteArrayInputStream(report.toString().getBytes());
 			try {
 				ObjectMetadata meta = new ObjectMetadata();

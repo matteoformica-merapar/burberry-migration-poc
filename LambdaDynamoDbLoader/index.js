@@ -19,12 +19,12 @@ var processedFiles = [];
 
 exports.handler = (event, context, callback) => {
     console.log('Received event:', JSON.stringify(event, null, 2));
-	const prefix = 'atg_process/';
+	const prefix = process.env.PREFIX+'/';
     var srcBucket = event.Records[0].s3.bucket.name;
     var srcKey = event.Records[0].s3.object.key;
-    var filename = srcItem.Key.substring(prefix.length);
+    var filename = srcKey.substring(prefix.length);
 	const logFileName = 'LOG_' + filename + ".log";
-
+	
 	console.log("Event " + event+ "\n");
     console.log("Params: srcBucket: " + srcBucket + " srcKey: " + srcKey + "\n");
     
@@ -150,7 +150,7 @@ exports.handler = (event, context, callback) => {
 		  
 					  S3.putObject({
 						Bucket: srcBucket,
-						Key: event.prefix + logFileName,
+						Key: prefix + logFileName,
 						Body: JSON.stringify(logObject, null, 4) //logFileBody
 					  }, function(err) {
 						if (err) {
