@@ -20,6 +20,11 @@ var processedFiles = [];
 exports.handler = (event, context, callback) => {
     console.log('Received event:', JSON.stringify(event, null, 2));
 	const prefix = process.env.PREFIX+'/';
+	const atgTable = process.env.ATG_TABLE;
+	const cdcTable = process.env.CDC_TABLE;
+	const atgFilePrefix = process.env.ATG_FILE_PREFIX;
+	const cdcFilePrefix = process.env.CDC_FILE_PREFIX;
+
     var srcBucket = event.Records[0].s3.bucket.name;
     var srcKey = event.Records[0].s3.object.key;
     var filename = srcKey.substring(prefix.length);
@@ -30,15 +35,15 @@ exports.handler = (event, context, callback) => {
     
     var tableName = "";
     
-	if (filename.startsWith("ATG_Export")) {
-      tableName = "customers";
-    } else if (filename.startsWith("CDC_Import")) {
-      tableName = "cdcimport";
+	if (filename.startsWith(atgFilePrefix)) {
+      tableName = atgTable;
+    } else if (filename.startsWith(cdcFilePrefix)) {
+      tableName = cdcTable;
     } else {
       console.log("File name not recognized: " + filename);
     }
 	
-	if(tableName === 'customers' || tableName === 'cdcimport'){
+	if(tableName === atgTable || tableName === cdcTable){
 		async.waterfall(
 		[ 
 			function download(next) {

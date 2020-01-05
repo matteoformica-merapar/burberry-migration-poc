@@ -1,6 +1,20 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Resources": {
+    "Parameters" : {
+		"DynamoDBATGTable" : {
+			"Type" : "String",
+			"Default" : "customers2",
+			"AllowedValues" : ["customers", "customers2", "customers3"],
+			"Description" : "DynamoDB table for customer data in ATG export files"
+		},
+		"DynamoDBCDCTable" : {
+			"Type" : "String",
+			"Default" : "cdcimport2",
+			"AllowedValues" : ["cdcimport", "cdcimport2", "cdcimport3"],
+			"Description" : "DynamoDB table for customer data in CDC export files"
+		}
+	},
+	"Resources": {
         "CIAMLambdaRole": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -34,30 +48,7 @@
                 }
             }
         },
-        "customers2": {
-            "Type": "AWS::DynamoDB::Table",
-            "Properties": {
-                "AttributeDefinitions": [
-                    {
-                        "AttributeName": "customerId",
-                        "AttributeType": "S"
-                    }
-                ],
-                "KeySchema": [
-                    {
-                        "AttributeName": "customerId",
-                        "KeyType": "HASH"
-                    }
-                ],
-                "BillingMode": "PAY_PER_REQUEST"
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "a1be918c-52a7-4727-8da3-cd26414cd49e"
-                }
-            }
-        },
-        "cdcimport2": {
+        "customers": {
             "Type": "AWS::DynamoDB::Table",
             "Properties": {
                 "AttributeDefinitions": [
@@ -73,7 +64,31 @@
                     }
                 ],
                 "BillingMode": "PAY_PER_REQUEST",
-                "TableName": "cdcimport2"
+                "TableName": { "Ref" : "DynamoDBATGTable" }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "a1be918c-52a7-4727-8da3-cd26414cd49e"
+                }
+            }
+        },
+        "cdcimport": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "customerId",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "customerId",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "BillingMode": "PAY_PER_REQUEST",
+                "TableName": { "Ref" : "DynamoDBCDCTable" }
             },
             "Metadata": {
                 "AWS::CloudFormation::Designer": {
@@ -132,8 +147,8 @@
                         "BUCKET_NAME": "ciam.atgmigration.test",
                         "PARALLEL_THREADS": 100,
                         "SCAN_LIMIT": 1000,
-                        "SOURCE_TABLE": "customers",
-                        "TARGET_TABLE": "cdcimport",
+                        "SOURCE_TABLE": { "Ref" : "DynamoDBATGTable" },
+                        "TARGET_TABLE": { "Ref" : "DynamoDBCDCTable" },
                         "WRITE_REPORT": true
                     }
                 }
@@ -167,7 +182,11 @@
                 "MemorySize": 3008,
                 "Environment": {
                     "Variables": {
-                        "PREFIX": "atg_process"
+                        "PREFIX": "atg_process",
+						"ATG_TABLE": { "Ref" : "DynamoDBATGTable" },
+						"CDC_TABLE": { "Ref" : "DynamoDBCDCTable" },
+						"ATG_FILE_PREFIX" : "ATG_Export",
+						"CDC_FILE_PREFIX" : "CDC_Import"
                     }
                 }
             },

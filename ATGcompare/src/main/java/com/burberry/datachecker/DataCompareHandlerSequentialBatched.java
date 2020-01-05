@@ -49,7 +49,7 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Compa
 	static int recordFoundMatching = 0;
 	String bucketName;
 	static List<ErrorDetail> errorDetails;
-
+	static ResponseClass rsp;
 	static final int BATCH_SIZE = 100;
 
 	StringBuilder sb = new StringBuilder("");
@@ -83,12 +83,13 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Compa
 		System.out.format("Record found matching: %s \n", recordFoundMatching);
 		System.out.format("Record found not matching : %s \n", recordFoundNotMatching);
 
-		ResponseClass rsp = new ResponseClass(recordFound, recordFoundMatching, recordNotFound, recordFoundNotMatching,
+		rsp = new ResponseClass(recordFound, recordFoundMatching, recordNotFound, recordFoundNotMatching,
 				errorDetails);
 		JSONObject s3Report = new JSONObject(rsp);
 		dumpReportToS3(input, s3Report.toString(2));
 		// remove list of error messages from Lambda output
 		rsp.setMessages(null);
+		System.out.format("PROCESSED RECORDS : %s \n", rsp.toString());
 		return rsp;
 	}
 
@@ -101,7 +102,6 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Compa
 				.withExclusiveStartKey(lastKey)
 				.withProjectionExpression("customerId, attributesHash, fileName");
 		
-		int processedItems = 0;
 		do {
 			List<CustomerRecord> scannedCustomers = new ArrayList<>();
 			ScanResult result = client.scan(scanRequest);
@@ -130,9 +130,6 @@ public class DataCompareHandlerSequentialBatched implements RequestHandler<Compa
 			lastKey = result.getLastEvaluatedKey();			
 			scanRequest.setExclusiveStartKey(lastKey);
 		} while (lastKey != null);
-		
-		
-		System.out.format("PROCESSED RECORDS : %s \n", processedItems);
 	}
 	
 	private static void queryTargetBatch(CompareRequest input, List<CustomerRecord> scannedCustomers) {

@@ -14,11 +14,6 @@ import com.burberry.datachecker.model.DataCopyRequest;
 public class DataCopyHandler implements RequestHandler<DataCopyRequest, String> {
 
 	AmazonS3 s3client = AmazonS3ClientBuilder.standard().build();
-
-//	String bucketName = System.getenv("BUCKET_NAME");
-//	String processFolderName = System.getenv("PROCESS_FOLDER_NAME");
-//	String prefix = System.getenv("FILENAME_PREFIX");
-//	String delay = System.getenv("DELAY");
 	
 	@Override
 	public String handleRequest(DataCopyRequest input, Context context) {

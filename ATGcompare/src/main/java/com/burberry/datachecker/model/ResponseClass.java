@@ -3,6 +3,7 @@ package com.burberry.datachecker.model;
 import java.util.List;
 
 public class ResponseClass {
+	
 	private int atgRecordFound;
 	private int atgRecordFoundMatching;
 	private int atgRecordNotFound;
@@ -59,4 +60,10 @@ public class ResponseClass {
 		this.messages = messages;
 	}
 
+	@Override
+	public String toString() {
+		return "ResponseClass [atgRecordFound=" + atgRecordFound + ", atgRecordFoundMatching=" + atgRecordFoundMatching
+				+ ", atgRecordNotFound=" + atgRecordNotFound + ", atgRecordFoundNotMatching="
+				+ atgRecordFoundNotMatching + "]";
+	}
 }
