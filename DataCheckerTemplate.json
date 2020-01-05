@@ -1,0 +1,500 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Resources": {
+        "CIAMLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/CloudWatchFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
+                    "arn:aws:iam::aws:policy/AWSXrayFullAccess"
+                ],
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "9d6d3b25-f7f6-4278-85b7-a27aeaff9d6c"
+                }
+            }
+        },
+        "customers2": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "customerId",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "customerId",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "BillingMode": "PAY_PER_REQUEST"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "a1be918c-52a7-4727-8da3-cd26414cd49e"
+                }
+            }
+        },
+        "cdcimport2": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "customerId",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "customerId",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "BillingMode": "PAY_PER_REQUEST",
+                "TableName": "cdcimport2"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "94b74097-28cc-476a-8496-924eb24ac3c1"
+                }
+            }
+        },
+        "CIAMCopyFilesToFolder": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": "CIAMCopyFilesToFolder",
+                "Code": {
+                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Key": "packages/datachecker-1.0.0.jar"
+                },
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CIAMLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Timeout": 900,
+                "Handler": "com.burberry.datacopier.DataCopyHandler::handleRequest",
+                "Runtime": "java8",
+                "MemorySize": 2304
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6edf0e91-b1ad-4e07-a275-9735851df2d5"
+                }
+            },
+            "DependsOn": [
+                "CIAMLambdaRole"
+            ]
+        },
+        "CIAMCompareATGndCDCdata": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": "CIAMCompareATGndCDCdata",
+                "Code": {
+                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Key": "packages/datachecker-1.0.0.jar"
+                },
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CIAMLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Timeout": 900,
+                "Handler": "com.burberry.datachecker.DataCompareHandlerSequentialBatched::handleRequest",
+                "Runtime": "java8",
+                "MemorySize": 3008,
+                "Environment": {
+                    "Variables": {
+                        "BUCKET_NAME": "ciam.atgmigration.test",
+                        "PARALLEL_THREADS": 100,
+                        "SCAN_LIMIT": 1000,
+                        "SOURCE_TABLE": "customers",
+                        "TARGET_TABLE": "cdcimport",
+                        "WRITE_REPORT": true
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "96271da7-abac-4bac-8e53-e05d8e413198"
+                }
+            },
+            "DependsOn": [
+                "CIAMLambdaRole"
+            ]
+        },
+        "CIAMLoadMigratedDataToDynamoDB": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": "CIAMLoadMigratedDataToDynamoDB",
+                "Code": {
+                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Key": "packages/LambdaDynamoDbLoader.zip"
+                },
+                "Role": {
+                    "Fn::GetAtt": [
+                        "CIAMLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Timeout": 900,
+                "Handler": "index.handler",
+                "Runtime": "nodejs10.x",
+                "MemorySize": 3008,
+                "Environment": {
+                    "Variables": {
+                        "PREFIX": "atg_process"
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "51c5e475-8a72-4688-8c0c-6d50043f4a10"
+                }
+            },
+            "DependsOn": [
+                "CIAMLambdaRole"
+            ]
+        },
+        "CIAMCopyApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": "CIAMCopyApi" 
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
+                }
+            },
+            "DependsOn": [
+                "CIAMCopyFilesToFolder"
+            ]
+        },
+        "CIAMCopyAPILoadResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+				"ParentId" : {"Fn::GetAtt": ["CIAMCopyApi", "RootResourceId"]},
+                "RestApiId": {
+                    "Ref": "CIAMCopyApi"
+                },
+                "PathPart": "load" 
+            },
+			"DependsOn": "CIAMCopyApi",
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
+                }
+            }
+        },
+        "CIAMCopyAPIPostMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "HttpMethod": "POST",
+				"AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "AWS",
+                    "IntegrationHttpMethod": "POST",
+                    "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["CIAMCopyFilesToFolder", "Arn"]}, "/invocations"]]},
+                    "RequestParameters": {
+                        "integration.request.header.X-Amz-Invocation-Type": "'Event'"
+                    }
+                },
+                "RestApiId": { "Ref": "CIAMCopyApi" },
+                "ResourceId": { "Ref": "CIAMCopyAPILoadResource" }
+            },
+			"DependsOn": "CIAMCopyAPILoadResource",
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "126d3131-c3cb-40d4-96d9-928ecedf918a"
+                }
+            }
+        },
+		"CIAMCopyLambdaPermission": {
+			"Type": "AWS::Lambda::Permission",
+			"Properties": {
+				"Action": "lambda:invokeFunction",
+				"FunctionName": {"Fn::GetAtt": ["CIAMCopyFilesToFolder", "Arn"]},
+				"Principal": "apigateway.amazonaws.com",
+				"SourceArn": {"Fn::Join": ["", 
+				  ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "CIAMCopyApi"}, "/*"]
+				]}
+			}
+		},
+		"CIAMCopyAPIDeployment": {
+			"Type": "AWS::ApiGateway::Deployment",
+			"Properties": {
+				"RestApiId": {
+					"Ref": "CIAMCopyApi"
+				},
+				"Description": "My deployment"
+			},
+			"DependsOn": "CIAMCopyAPIPostMethod"
+		},
+		"CIAMCopyAPIDevStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "StageName": "dev",
+                "Description": "Dev Stage",
+                "RestApiId": {
+                    "Ref": "CIAMCopyApi"
+                },
+                "DeploymentId": {
+                    "Ref": "CIAMCopyAPIDeployment"
+                }
+            }
+        },
+		"CIAMCompareApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": "CIAMCompareApi" 
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
+                }
+            },
+            "DependsOn": [
+                "CIAMCompareATGndCDCdata"
+			]
+        },
+        "CIAMCompareAPILoadResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+				"ParentId" : {"Fn::GetAtt": ["CIAMCompareApi", "RootResourceId"]},
+                "RestApiId": { "Ref": "CIAMCompareApi" },
+                "PathPart": "compare" 
+            },
+			"DependsOn": "CIAMCompareApi",
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
+                }
+            }
+        },
+        "CIAMCompareAPIPostMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "HttpMethod": "POST",
+				"AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "AWS",
+                    "IntegrationHttpMethod": "POST",
+                    "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["CIAMCompareATGndCDCdata", "Arn"]}, "/invocations"]]},
+                    "RequestParameters": {
+                        "integration.request.header.X-Amz-Invocation-Type": "'Event'"
+                    }
+                },
+                "RestApiId": { "Ref": "CIAMCompareApi" },
+                "ResourceId": { "Ref": "CIAMCompareAPILoadResource" }
+            },
+			"DependsOn": "CIAMCompareAPILoadResource",
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "126d3131-c3cb-40d4-96d9-928ecedf918a"
+                }
+            }
+        },
+		"CIAMCompareLambdaPermission": {
+			"Type": "AWS::Lambda::Permission",
+			"Properties": {
+				"Action": "lambda:invokeFunction",
+				"FunctionName": {"Fn::GetAtt": ["CIAMCompareATGndCDCdata", "Arn"]},
+				"Principal": "apigateway.amazonaws.com",
+				"SourceArn": {"Fn::Join": ["", 
+				  ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "CIAMCompareApi"}, "/*"]
+				]}
+			}
+		},
+		"CIAMCompareAPIDeployment": {
+			"Type": "AWS::ApiGateway::Deployment",
+			"Properties": {
+				"RestApiId": {
+					"Ref": "CIAMCompareApi"
+				}
+			},
+			"DependsOn": "CIAMCompareAPIPostMethod"
+		},
+		"CIAMCompareAPIDevStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "StageName": "dev",
+                "Description": "Dev Stage",
+                "RestApiId": {
+                    "Ref": "CIAMCompareApi"
+                },
+                "DeploymentId": {
+                    "Ref": "CIAMCompareAPIDeployment"
+                }
+            }
+        }
+    },
+	"Outputs": {
+		"CIAMCopyApiUrl": {
+		  "Description": "Root URL of the CIAMCopyApi",
+		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCopyApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCopyAPIDevStage"}]]}
+		},
+		"CIAMCompareApiUrl": {
+		  "Description": "Root URL of the CIAMCopyApi",
+		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCompareApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCompareAPIDevStage"}]]}
+		},
+		"CIAMLoadDataLambdaArn": {
+		  "Description": "ARN of the Loading Lambda",
+		  "Value": {"Fn::GetAtt": ["CIAMLoadMigratedDataToDynamoDB", "Arn"]}
+		}
+	},
+    "Metadata": {
+        "AWS::CloudFormation::Designer": {
+            "9d6d3b25-f7f6-4278-85b7-a27aeaff9d6c": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 750
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "a1be918c-52a7-4727-8da3-cd26414cd49e": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -20,
+                    "y": 740
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "94b74097-28cc-476a-8496-924eb24ac3c1": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 86.07724567096172,
+                    "y": 740.1492450125733
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "94b74097-28cc-476a-8496-924eb24ac3c1"
+                ]
+            },
+            "6edf0e91-b1ad-4e07-a275-9735851df2d5": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 346.345728520077,
+                    "y": 636.3150862506466
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "96271da7-abac-4bac-8e53-e05d8e413198": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 210,
+                    "y": 640
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "51c5e475-8a72-4688-8c0c-6d50043f4a10": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 85.12383416906896,
+                    "y": 639.3703130851613
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "ad79703f-24c9-4bda-9869-ab12d282d476": {
+                "size": {
+                    "width": 140,
+                    "height": 140
+                },
+                "position": {
+                    "x": -230,
+                    "y": 810
+                },
+                "z": 0,
+                "embeds": [
+                    "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
+                ],
+                "dependson": [
+                    "51c5e475-8a72-4688-8c0c-6d50043f4a10"
+                ]
+            },
+            "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9": {
+                "size": {
+                    "width": 114.32066615272001,
+                    "height": 81.61230584168447
+                },
+                "position": {
+                    "x": -214.32066615272004,
+                    "y": 858.3876941583155
+                },
+                "z": 1,
+                "parent": "ad79703f-24c9-4bda-9869-ab12d282d476",
+                "iscontainedinside": [
+                    "ad79703f-24c9-4bda-9869-ab12d282d476"
+                ]
+            },
+            "b2eae384-aed9-489b-9454-859e03e746dc": {
+                "source": {
+                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
+                },
+                "target": {
+                    "id": "51c5e475-8a72-4688-8c0c-6d50043f4a10"
+                },
+                "z": 11
+            },
+            "126d3131-c3cb-40d4-96d9-928ecedf918a": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -190,
+                    "y": 990
+                },
+                "z": 0
+            }
+        }
+    }
+}
