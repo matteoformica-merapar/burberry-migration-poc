@@ -374,11 +374,11 @@
 	"Outputs": {
 		"CIAMCopyApiUrl": {
 		  "Description": "Root URL of the CIAMCopyApi",
-		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCopyApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCopyAPIDevStage"}]]}
+		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCopyApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCopyAPIDevStage"}, "/load"]]}
 		},
 		"CIAMCompareApiUrl": {
 		  "Description": "Root URL of the CIAMCopyApi",
-		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCompareApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCompareAPIDevStage"}]]}
+		  "Value": {"Fn::Join": ["", ["https://", {"Ref": "CIAMCompareApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "CIAMCompareAPIDevStage"}, "/compare"]]}
 		},
 		"CIAMLoadDataLambdaArn": {
 		  "Description": "ARN of the Loading Lambda",
