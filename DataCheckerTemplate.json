@@ -3,13 +3,13 @@
     "Parameters" : {
 		"DynamoDBATGTable" : {
 			"Type" : "String",
-			"Default" : "customers2",
+			"Default" : "customers",
 			"AllowedValues" : ["customers", "customers2", "customers3"],
 			"Description" : "DynamoDB table for customer data in ATG export files"
 		},
 		"DynamoDBCDCTable" : {
 			"Type" : "String",
-			"Default" : "cdcimport2",
+			"Default" : "cdcimport",
 			"AllowedValues" : ["cdcimport", "cdcimport2", "cdcimport3"],
 			"Description" : "DynamoDB table for customer data in CDC export files"
 		}
@@ -41,14 +41,9 @@
                     ]
                 },
                 "Path": "/"
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "9d6d3b25-f7f6-4278-85b7-a27aeaff9d6c"
-                }
             }
         },
-        "customers": {
+        "SourceDbTable": {
             "Type": "AWS::DynamoDB::Table",
             "Properties": {
                 "AttributeDefinitions": [
@@ -65,14 +60,9 @@
                 ],
                 "BillingMode": "PAY_PER_REQUEST",
                 "TableName": { "Ref" : "DynamoDBATGTable" }
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "a1be918c-52a7-4727-8da3-cd26414cd49e"
-                }
             }
         },
-        "cdcimport": {
+        "TargetDbTable": {
             "Type": "AWS::DynamoDB::Table",
             "Properties": {
                 "AttributeDefinitions": [
@@ -89,11 +79,6 @@
                 ],
                 "BillingMode": "PAY_PER_REQUEST",
                 "TableName": { "Ref" : "DynamoDBCDCTable" }
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "94b74097-28cc-476a-8496-924eb24ac3c1"
-                }
             }
         },
         "CIAMCopyFilesToFolder": {
@@ -114,11 +99,6 @@
                 "Handler": "com.burberry.datacopier.DataCopyHandler::handleRequest",
                 "Runtime": "java8",
                 "MemorySize": 2304
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "6edf0e91-b1ad-4e07-a275-9735851df2d5"
-                }
             },
             "DependsOn": [
                 "CIAMLambdaRole"
@@ -153,11 +133,6 @@
                     }
                 }
             },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "96271da7-abac-4bac-8e53-e05d8e413198"
-                }
-            },
             "DependsOn": [
                 "CIAMLambdaRole"
             ]
@@ -190,15 +165,22 @@
                     }
                 }
             },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "51c5e475-8a72-4688-8c0c-6d50043f4a10"
-                }
-            },
             "DependsOn": [
                 "CIAMLambdaRole"
             ]
         },
+		"CIAMCopyApiLogGroup": {
+			"Type": "AWS::Logs::LogGroup",
+			"Properties": {
+				"RetentionInDays": 7
+			}
+		},
+		"CIAMCompareApiLogGroup": {
+			"Type": "AWS::Logs::LogGroup",
+			"Properties": {
+				"RetentionInDays": 7
+			}
+		},
         "CIAMCopyApi": {
             "Type": "AWS::ApiGateway::RestApi",
             "Properties": {
@@ -222,12 +204,7 @@
                 },
                 "PathPart": "load" 
             },
-			"DependsOn": "CIAMCopyApi",
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
-                }
-            }
+			"DependsOn": "CIAMCopyApi"
         },
         "CIAMCopyAPIPostMethod": {
             "Type": "AWS::ApiGateway::Method",
@@ -240,17 +217,21 @@
                     "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["CIAMCopyFilesToFolder", "Arn"]}, "/invocations"]]},
                     "RequestParameters": {
                         "integration.request.header.X-Amz-Invocation-Type": "'Event'"
-                    }
+                    },
+					"IntegrationResponses" : [{
+						"StatusCode" : 200
+					}]
                 },
+				"MethodResponses": [{
+					  "StatusCode": 200,
+					  "ResponseModels": {
+						"application/json": "Empty"
+					  }
+				}],
                 "RestApiId": { "Ref": "CIAMCopyApi" },
                 "ResourceId": { "Ref": "CIAMCopyAPILoadResource" }
             },
-			"DependsOn": "CIAMCopyAPILoadResource",
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "126d3131-c3cb-40d4-96d9-928ecedf918a"
-                }
-            }
+			"DependsOn": "CIAMCopyAPILoadResource"            
         },
 		"CIAMCopyLambdaPermission": {
 			"Type": "AWS::Lambda::Permission",
@@ -266,10 +247,8 @@
 		"CIAMCopyAPIDeployment": {
 			"Type": "AWS::ApiGateway::Deployment",
 			"Properties": {
-				"RestApiId": {
-					"Ref": "CIAMCopyApi"
-				},
-				"Description": "My deployment"
+				"RestApiId": { "Ref": "CIAMCopyApi" },
+				"Description": "CIAMCopy API deployment"
 			},
 			"DependsOn": "CIAMCopyAPIPostMethod"
 		},
@@ -278,23 +257,24 @@
             "Properties": {
                 "StageName": "dev",
                 "Description": "Dev Stage",
-                "RestApiId": {
-                    "Ref": "CIAMCopyApi"
-                },
-                "DeploymentId": {
-                    "Ref": "CIAMCopyAPIDeployment"
-                }
-            }
+				"MethodSettings": [{
+					  "DataTraceEnabled": true,
+					  "HttpMethod": "*",
+					  "LoggingLevel": "INFO",
+					  "ResourcePath": "/*"
+				}],
+				"AccessLogSetting" : {
+					"DestinationArn" : {"Fn::GetAtt": ["CIAMCopyApiLogGroup", "Arn"]}
+				},
+                "RestApiId": { "Ref": "CIAMCopyApi" },
+                "DeploymentId": { "Ref": "CIAMCopyAPIDeployment" }
+            },
+			"DependsOn" : ["CIAMApiGatewayAccount"]
         },
 		"CIAMCompareApi": {
             "Type": "AWS::ApiGateway::RestApi",
             "Properties": {
                 "Name": "CIAMCompareApi" 
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
-                }
             },
             "DependsOn": [
                 "CIAMCompareATGndCDCdata"
@@ -307,12 +287,7 @@
                 "RestApiId": { "Ref": "CIAMCompareApi" },
                 "PathPart": "compare" 
             },
-			"DependsOn": "CIAMCompareApi",
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
-                }
-            }
+			"DependsOn": "CIAMCompareApi"
         },
         "CIAMCompareAPIPostMethod": {
             "Type": "AWS::ApiGateway::Method",
@@ -325,17 +300,21 @@
                     "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["CIAMCompareATGndCDCdata", "Arn"]}, "/invocations"]]},
                     "RequestParameters": {
                         "integration.request.header.X-Amz-Invocation-Type": "'Event'"
-                    }
+                    },
+					"IntegrationResponses" : [{
+						"StatusCode" : 200
+					}]
                 },
+				"MethodResponses": [{
+					  "StatusCode": 200,
+					  "ResponseModels": {
+						"application/json": "Empty"
+					  }
+				}],
                 "RestApiId": { "Ref": "CIAMCompareApi" },
                 "ResourceId": { "Ref": "CIAMCompareAPILoadResource" }
             },
-			"DependsOn": "CIAMCompareAPILoadResource",
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "126d3131-c3cb-40d4-96d9-928ecedf918a"
-                }
-            }
+			"DependsOn": "CIAMCompareAPILoadResource"
         },
 		"CIAMCompareLambdaPermission": {
 			"Type": "AWS::Lambda::Permission",
@@ -362,15 +341,64 @@
             "Properties": {
                 "StageName": "dev",
                 "Description": "Dev Stage",
+				"MethodSettings": [{
+					  "DataTraceEnabled": true,
+					  "HttpMethod": "*",
+					  "LoggingLevel": "INFO",
+					  "ResourcePath": "/*"
+				}],
+				"AccessLogSetting" : {
+					"DestinationArn" : {"Fn::GetAtt": ["CIAMCompareApiLogGroup", "Arn"]}
+				},
                 "RestApiId": {
                     "Ref": "CIAMCompareApi"
                 },
                 "DeploymentId": {
                     "Ref": "CIAMCompareAPIDeployment"
                 }
-            }
-        }
-    },
+            },
+			"DependsOn" : ["CIAMApiGatewayAccount"]
+        },
+		"ApiGatewayCloudWatchLogsRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [{
+						"Effect": "Allow",
+						"Principal": { "Service": ["apigateway.amazonaws.com"] },
+						"Action": ["sts:AssumeRole"]
+					}]
+				},
+				"Policies": [{
+					"PolicyName": "ApiGatewayLogsPolicy",
+					"PolicyDocument": {
+						"Version": "2012-10-17",
+						"Statement": [{
+							"Effect": "Allow",
+							 "Action": [
+								"logs:CreateLogGroup",
+								"logs:CreateLogStream",
+								"logs:DescribeLogGroups",
+								"logs:DescribeLogStreams",
+								"logs:PutLogEvents",
+								"logs:GetLogEvents",
+								"logs:FilterLogEvents"
+							  ],
+						"Resource": "*"
+						}]
+					}
+				}]
+			}
+		},
+		"CIAMApiGatewayAccount": {
+			"Type" : "AWS::ApiGateway::Account",
+			"Properties" : {
+				"CloudWatchRoleArn" : {"Fn::GetAtt" : ["ApiGatewayCloudWatchLogsRole", "Arn"] }
+			},
+			"DependsOn" : ["ApiGatewayCloudWatchLogsRole"]
+		}
+	},
 	"Outputs": {
 		"CIAMCopyApiUrl": {
 		  "Description": "Root URL of the CIAMCopyApi",
@@ -384,136 +412,5 @@
 		  "Description": "ARN of the Loading Lambda",
 		  "Value": {"Fn::GetAtt": ["CIAMLoadMigratedDataToDynamoDB", "Arn"]}
 		}
-	},
-    "Metadata": {
-        "AWS::CloudFormation::Designer": {
-            "9d6d3b25-f7f6-4278-85b7-a27aeaff9d6c": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": 300,
-                    "y": 750
-                },
-                "z": 1,
-                "embeds": []
-            },
-            "a1be918c-52a7-4727-8da3-cd26414cd49e": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": -20,
-                    "y": 740
-                },
-                "z": 0,
-                "embeds": []
-            },
-            "94b74097-28cc-476a-8496-924eb24ac3c1": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": 86.07724567096172,
-                    "y": 740.1492450125733
-                },
-                "z": 0,
-                "embeds": [],
-                "isassociatedwith": [
-                    "94b74097-28cc-476a-8496-924eb24ac3c1"
-                ]
-            },
-            "6edf0e91-b1ad-4e07-a275-9735851df2d5": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": 346.345728520077,
-                    "y": 636.3150862506466
-                },
-                "z": 0,
-                "embeds": []
-            },
-            "96271da7-abac-4bac-8e53-e05d8e413198": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": 210,
-                    "y": 640
-                },
-                "z": 0,
-                "embeds": []
-            },
-            "51c5e475-8a72-4688-8c0c-6d50043f4a10": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": 85.12383416906896,
-                    "y": 639.3703130851613
-                },
-                "z": 0,
-                "embeds": []
-            },
-            "ad79703f-24c9-4bda-9869-ab12d282d476": {
-                "size": {
-                    "width": 140,
-                    "height": 140
-                },
-                "position": {
-                    "x": -230,
-                    "y": 810
-                },
-                "z": 0,
-                "embeds": [
-                    "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9"
-                ],
-                "dependson": [
-                    "51c5e475-8a72-4688-8c0c-6d50043f4a10"
-                ]
-            },
-            "b63831fb-b8bf-4545-9dbb-3d1367f0b4d9": {
-                "size": {
-                    "width": 114.32066615272001,
-                    "height": 81.61230584168447
-                },
-                "position": {
-                    "x": -214.32066615272004,
-                    "y": 858.3876941583155
-                },
-                "z": 1,
-                "parent": "ad79703f-24c9-4bda-9869-ab12d282d476",
-                "iscontainedinside": [
-                    "ad79703f-24c9-4bda-9869-ab12d282d476"
-                ]
-            },
-            "b2eae384-aed9-489b-9454-859e03e746dc": {
-                "source": {
-                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
-                },
-                "target": {
-                    "id": "51c5e475-8a72-4688-8c0c-6d50043f4a10"
-                },
-                "z": 11
-            },
-            "126d3131-c3cb-40d4-96d9-928ecedf918a": {
-                "size": {
-                    "width": 60,
-                    "height": 60
-                },
-                "position": {
-                    "x": -190,
-                    "y": 990
-                },
-                "z": 0
-            }
-        }
-    }
+	}
 }
