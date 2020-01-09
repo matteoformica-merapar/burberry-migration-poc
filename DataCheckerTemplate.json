@@ -12,6 +12,12 @@
 			"Default" : "cdcimport",
 			"AllowedValues" : ["cdcimport", "cdcimport2", "cdcimport3"],
 			"Description" : "DynamoDB table for customer data in CDC export files"
+		},
+		"S3BucketName" : {
+			"Type" : "String",
+			"Default" : "s3-for-ciam-data-migration-prod",
+			"AllowedValues" : ["ciam.atgmigration.test", "s3-for-ciam-data-migration-prod", "s3-for-ciam-data-migration"],
+			"Description" : "DynamoDB table for customer data in CDC export files"
 		}
 	},
 	"Resources": {
@@ -86,7 +92,7 @@
             "Properties": {
                 "FunctionName": "CIAMCopyFilesToFolder",
                 "Code": {
-                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Bucket": { "Ref" : "S3BucketName" },
                     "S3Key": "packages/datachecker-1.0.0.jar"
                 },
                 "Role": {
@@ -109,7 +115,7 @@
             "Properties": {
                 "FunctionName": "CIAMCompareATGndCDCdata",
                 "Code": {
-                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Bucket": { "Ref" : "S3BucketName" },
                     "S3Key": "packages/datachecker-1.0.0.jar"
                 },
                 "Role": {
@@ -124,7 +130,7 @@
                 "MemorySize": 3008,
                 "Environment": {
                     "Variables": {
-                        "BUCKET_NAME": "ciam.atgmigration.test",
+                        "BUCKET_NAME": { "Ref" : "S3BucketName" },
                         "PARALLEL_THREADS": 100,
                         "SCAN_LIMIT": 1000,
                         "SOURCE_TABLE": { "Ref" : "DynamoDBATGTable" },
@@ -142,7 +148,7 @@
             "Properties": {
                 "FunctionName": "CIAMLoadMigratedDataToDynamoDB",
                 "Code": {
-                    "S3Bucket": "ciam.atgmigration.test",
+                    "S3Bucket": { "Ref" : "S3BucketName" },
                     "S3Key": "packages/LambdaDynamoDbLoader.zip"
                 },
                 "Role": {
@@ -185,11 +191,6 @@
             "Type": "AWS::ApiGateway::RestApi",
             "Properties": {
                 "Name": "CIAMCopyApi" 
-            },
-            "Metadata": {
-                "AWS::CloudFormation::Designer": {
-                    "id": "ad79703f-24c9-4bda-9869-ab12d282d476"
-                }
             },
             "DependsOn": [
                 "CIAMCopyFilesToFolder"
@@ -330,9 +331,7 @@
 		"CIAMCompareAPIDeployment": {
 			"Type": "AWS::ApiGateway::Deployment",
 			"Properties": {
-				"RestApiId": {
-					"Ref": "CIAMCompareApi"
-				}
+				"RestApiId": { "Ref": "CIAMCompareApi" }
 			},
 			"DependsOn": "CIAMCompareAPIPostMethod"
 		},
@@ -350,12 +349,8 @@
 				"AccessLogSetting" : {
 					"DestinationArn" : {"Fn::GetAtt": ["CIAMCompareApiLogGroup", "Arn"]}
 				},
-                "RestApiId": {
-                    "Ref": "CIAMCompareApi"
-                },
-                "DeploymentId": {
-                    "Ref": "CIAMCompareAPIDeployment"
-                }
+                "RestApiId": { "Ref": "CIAMCompareApi" },
+                "DeploymentId": { "Ref": "CIAMCompareAPIDeployment" }
             },
 			"DependsOn" : ["CIAMApiGatewayAccount"]
         },
