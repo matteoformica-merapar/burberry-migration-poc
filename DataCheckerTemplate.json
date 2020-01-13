@@ -245,6 +245,14 @@
 				]}
 			}
 		},
+		"CIAMLoadLambdaPermission": {
+			"Type": "AWS::Lambda::Permission",
+			"Properties": {
+				"Action": "lambda:invokeFunction",
+				"FunctionName": {"Fn::GetAtt": ["CIAMLoadMigratedDataToDynamoDB", "Arn"]},
+				"Principal": "s3.amazonaws.com"
+			}
+		},
 		"CIAMCopyAPIDeployment": {
 			"Type": "AWS::ApiGateway::Deployment",
 			"Properties": {

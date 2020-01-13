@@ -11,14 +11,15 @@ var S3 = new AWS.S3({
     region: 'eu-west-1',
 });
 
-var insertSuccess = 0;
-var insertErrors = 0;
-var totalSuccess = 0;
-var totalErrors = 0;
-var processedFiles = [];
-
 exports.handler = (event, context, callback) => {
     console.log('Received event:', JSON.stringify(event, null, 2));
+	
+	var insertSuccess = 0;
+	var insertErrors = 0;
+	var totalSuccess = 0;
+	var totalErrors = 0;
+	var processedFiles = [];
+	
 	const processFolderName = process.env.PROCESS_FOLDER_NAME+'/';
 	const atgTable = process.env.ATG_TABLE;
 	const cdcTable = process.env.CDC_TABLE;
@@ -33,7 +34,7 @@ exports.handler = (event, context, callback) => {
 	var pathArray = fullFilePath.split("/"); 
 	var filename = pathArray[pathArray.length-1];
 	
-	const logFilePath = srcKey.substring(0, srcKey.length - filename.length) + 'LOG_' + filename + ".log";;
+	const logFilePath = 'LOAD_LOG/' + 'LOG_' + filename + ".log";;
 	
 	console.log("Event " + event+ "\n");
     console.log("Params: srcBucket: " + srcBucket + " srcKey: " + srcKey + "\n");
