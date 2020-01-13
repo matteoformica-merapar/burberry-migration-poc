@@ -163,7 +163,7 @@
                 "MemorySize": 3008,
                 "Environment": {
                     "Variables": {
-                        "PREFIX": "atg_process",
+                        "PROCESS_FOLDER_NAME": "atg_process",
 						"ATG_TABLE": { "Ref" : "DynamoDBATGTable" },
 						"CDC_TABLE": { "Ref" : "DynamoDBCDCTable" },
 						"ATG_FILE_PREFIX" : "ATG_Export",

@@ -19,7 +19,7 @@ var processedFiles = [];
 
 exports.handler = (event, context, callback) => {
     console.log('Received event:', JSON.stringify(event, null, 2));
-	const prefix = process.env.PREFIX+'/';
+	const processFolderName = process.env.PROCESS_FOLDER_NAME+'/';
 	const atgTable = process.env.ATG_TABLE;
 	const cdcTable = process.env.CDC_TABLE;
 	const atgFilePrefix = process.env.ATG_FILE_PREFIX;
@@ -27,12 +27,19 @@ exports.handler = (event, context, callback) => {
 
     var srcBucket = event.Records[0].s3.bucket.name;
     var srcKey = event.Records[0].s3.object.key;
-    var filename = srcKey.substring(prefix.length);
-	const logFileName = 'LOG_' + filename + ".log";
+	
+	//to extract the filename, remove the process folder name and intermediate subfolders
+	var fullFilePath = srcKey.substring(processFolderName.length);
+	var pathArray = fullFilePath.split("/"); 
+	var filename = pathArray[pathArray.length-1];
+	
+	const logFilePath = srcKey.substring(0, srcKey.length - filename.length) + 'LOG_' + filename + ".log";;
 	
 	console.log("Event " + event+ "\n");
     console.log("Params: srcBucket: " + srcBucket + " srcKey: " + srcKey + "\n");
-    
+	console.log("Processing File name: " + filename + "\n");
+	console.log("Log file path: " + logFilePath + "\n");
+
     var tableName = "";
     
 	if (filename.startsWith(atgFilePrefix)) {
@@ -40,7 +47,7 @@ exports.handler = (event, context, callback) => {
     } else if (filename.startsWith(cdcFilePrefix)) {
       tableName = cdcTable;
     } else {
-      console.log("File name not recognized: " + filename);
+      console.log("File name not recognized: " + filename + "\n");
     }
 	
 	if(tableName === atgTable || tableName === cdcTable){
@@ -155,7 +162,7 @@ exports.handler = (event, context, callback) => {
 		  
 					  S3.putObject({
 						Bucket: srcBucket,
-						Key: prefix + logFileName,
+						Key: logFilePath,
 						Body: JSON.stringify(logObject, null, 4) //logFileBody
 					  }, function(err) {
 						if (err) {
